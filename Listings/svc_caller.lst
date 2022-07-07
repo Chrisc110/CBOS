@@ -10,44 +10,45 @@ ARM Macro Assembler    Page 1
     4 00000000                 PRESERVE8
     5 00000000         PendSV_Handler
     6 00000000         
-    7 00000000         ;write the magic value of 0xFFFFFFFD (seven F's then a D
-                       ) to LR
-    8 00000000 F06F 0E02       mov              LR, #0xFFFFFFFD
-    9 00000004 F3EF 8009       MRS              r0, PSP
-   10 00000008         ;5. Put R4 through R11 onto the stack
-   11 00000008 E920 0FF0       stmdb            r0!,{r4-r11}
-   12 0000000C         ;6. Save the thread’s stack pointer-- done in #3 in main
-                       .c function
-   13 0000000C         
-   14 0000000C         ;7. Switch PSP so that it points to the new thread’s sta
-                       ck pointer 
-   15 0000000C         ;call function to switch r0 to new function stack pointe
-                       r
-   16 0000000C F7FF FFFE       BL               set_PSP_new_stackPtr
-   17 00000010 F06F 0E02       mov              LR, #0xFFFFFFFD
-   18 00000014         
-   19 00000014 F3EF 8009       MRS              r0, PSP
-   20 00000018         
-   21 00000018         ;8. Pop R11 through R4 (notice the reverse order)set r0 
-                       to new psp in order to access
-   22 00000018 E8B0 0FF0       ldmia            r0!,{r4-r11}
-   23 0000001C         
-   24 0000001C         ;9. Return from the PendSV handler. The microcontroller 
+    7 00000000         ;setting r0 to the address of PSP
+    8 00000000 F3EF 8009       MRS              r0, PSP
+    9 00000004         
+   10 00000004         ;5. Put R4 through R11 onto the stack, "saving its conte
+                       xt"
+   11 00000004 E920 0FF0       stmdb            r0!,{r4-r11}
+   12 00000008         
+   13 00000008         ;since we are saving the PSP in set_PSP_new_stackPtr, 
+   14 00000008         ;we are making sure that it is up to date with r0
+   15 00000008 F380 8809       MSR              PSP,r0
+   16 0000000C         
+   17 0000000C         ;calling the c function which does the following:
+   18 0000000C         ;1. Save the PSP for next time we want to enter the thre
+                       ad
+   19 0000000C         ;2. Increment the "current thread" index to the new thre
+                       ad we want to run
+   20 0000000C         ;3. Set the PSP to whatever it was before when we left t
+                       he new thread
+   21 0000000C F7FF FFFE       BL               set_PSP_new_stackPtr
+   22 00000010         
+   23 00000010         ;setting LR which does the important following things:
+   24 00000010         ;1. Go back into thread mode
+   25 00000010         ;2. Return to the PSP
+   26 00000010 F06F 0E02       mov              LR, #0xFFFFFFFD
+   27 00000014         
+   28 00000014         ;setting r0 to the address of the new thread's PSP
+   29 00000014 F3EF 8009       MRS              r0, PSP
+   30 00000018         
+   31 00000018         
+   32 00000018         ;8. Pop R11 through R4, "restoring its context"
+   33 00000018 E8B0 0FF0       ldmia            r0!,{r4-r11}
+   34 0000001C         
+   35 0000001C         ;9. Return from the PendSV handler. The microcontroller 
                        will pop the rest of the registers out for you
-   25 0000001C F380 8809       MSR              PSP, r0
-   26 00000020         
-   27 00000020         
-   28 00000020         
-   29 00000020         ;return - Note that, since LR has the magic value, the m
-                       icrocontroller reloads it from the 
-   30 00000020         ;stack frame it pushed on at the start of this call. Fin
-                       ding that value and aligning your stack
-   31 00000020         ;will 100% cause you grief while you try to do a context
-                        switch, but how to do that depends
-   32 00000020         ;so much on your design that we can't tell you how!
-   33 00000020 4770            BX               LR
-   34 00000022         
-   35 00000022                 END
+   36 0000001C F380 8809       MSR              PSP, r0
+   37 00000020         
+   38 00000020 4770            BX               LR
+   39 00000022         
+   40 00000022                 END
 Command Line: --debug --xref --diag_suppress=9931 --cpu=Cortex-M3 --apcs=interw
 ork --depend=.\objects\svc_caller.d -o.\objects\svc_caller.o -I.\RTE\Device\LPC
 1768 -I.\RTE\_Target_1 -IC:\Software\Keil_v5\ARM\PACK\ARM\CMSIS\5.8.0\CMSIS\Cor
@@ -90,7 +91,7 @@ Symbol: set_PSP_new_stackPtr
    Definitions
       At line 3 in file svc_caller.s
    Uses
-      At line 16 in file svc_caller.s
+      At line 21 in file svc_caller.s
 Comment: set_PSP_new_stackPtr used once
 1 symbol
 337 symbols in table

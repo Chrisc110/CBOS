@@ -4,32 +4,37 @@
 	PRESERVE8
 PendSV_Handler
 		
-		;write the magic value of 0xFFFFFFFD (seven F's then a D) to LR
-		mov LR, #0xFFFFFFFD
+		;setting r0 to the address of PSP
 		MRS r0, PSP
-		;5. Put R4 through R11 onto the stack
+		
+		;5. Put R4 through R11 onto the stack, "saving its context"
 		stmdb r0!,{r4-r11}
-		;6. Save the thread’s stack pointer-- done in #3 in main.c function
 		
-		;7. Switch PSP so that it points to the new thread’s stack pointer 
-			;call function to switch r0 to new function stack pointer
+		;since we are saving the PSP in set_PSP_new_stackPtr, 
+		;we are making sure that it is up to date with r0
+		MSR PSP,r0
+		
+		;calling the c function which does the following:
+		;1. Save the PSP for next time we want to enter the thread
+		;2. Increment the "current thread" index to the new thread we want to run
+		;3. Set the PSP to whatever it was before when we left the new thread
 		BL set_PSP_new_stackPtr 
+		
+		;setting LR which does the important following things:
+		;1. Go back into thread mode
+		;2. Return to the PSP
 		mov LR, #0xFFFFFFFD
 		
+		;setting r0 to the address of the new thread's PSP
 		MRS r0, PSP
-				
-		;8. Pop R11 through R4 (notice the reverse order)set r0 to new psp in order to access
+		
+		
+		;8. Pop R11 through R4, "restoring its context"
 		ldmia r0!,{r4-r11}
-				
+		
 		;9. Return from the PendSV handler. The microcontroller will pop the rest of the registers out for you
 		MSR PSP, r0
 
-		
-	
-		;return - Note that, since LR has the magic value, the microcontroller reloads it from the 
-		;stack frame it pushed on at the start of this call. Finding that value and aligning your stack
-		;will 100% cause you grief while you try to do a context switch, but how to do that depends
-		;so much on your design that we can't tell you how!
 		BX LR
 		
 		END
