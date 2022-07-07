@@ -104,6 +104,10 @@ void CBOS_create_thread(void (*funct_ptr)())
 	CBOS_threadStatus.threadInfo[CBOS_threadStatus.thread_count - 1].stackPtr_address = (uint32_t)pspCopy;
 }
 
+void CBOS_kernel_initialize(void){
+
+}
+
 void CBOS_kernel_start(void){
 	__set_CONTROL(1<<1);
 	
@@ -113,12 +117,14 @@ void CBOS_kernel_start(void){
 		instead of popping, so we are setting an offset to ensure we are back 
 		where we should be
 	*/
-	__set_PSP(CBOS_threadStatus.threadInfo[0].stackPtr_address + 14 *4);
+	__set_PSP(CBOS_threadStatus.threadInfo[0].stackPtr_address + 12*4); //old offset was 14*4
+	
+	//setup systick timer
+	SysTick_Config(SystemCoreClock/200);
 	
 	//Start the first switch
 	trigger_pendsv();
 }
-
 
 void set_PSP_new_stackPtr(){
 	printf("Switching Context!\n");
@@ -136,4 +142,6 @@ void set_PSP_new_stackPtr(){
 	__set_PSP((uint32_t)CBOS_threadStatus.threadInfo[CBOS_threadStatus.current_thread].stackPtr_address);
 }
 
-
+void SysTick_Handler(void){
+	trigger_pendsv();
+}
