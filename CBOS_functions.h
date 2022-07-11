@@ -8,10 +8,10 @@
 
 #define THREAD_STACK_SIZE 0x200 //512 byte thread stack. This is a lot.
 
-typedef struct{
+typedef struct CBOS_threadInfo_t{
 	void (*funct_ptr)(); // do we use this?
 	uint32_t stackPtr_address;
-	CBOS_threadInfo_t * next;
+	struct CBOS_threadInfo_t * next;
 	uint8_t priority;
 }CBOS_threadInfo_t;
 
@@ -26,14 +26,14 @@ typedef struct{
 }CBOS_semaphore_t;
 
 typedef struct {
-	uint8_t thread_count;
-	CBOS_threadInfo_t current_thread;
+	uint8_t thread_count; //eventually remove, we will just update initial_MSP_addr with the "next" thread location
+	CBOS_threadInfo_t * current_thread;
 	uint32_t initial_MSP_addr;
-	CBOS_threadInfo_t * threadInfo[10];
+	CBOS_threadInfo_t * priorityArray[10];
 	//array or linked list to store mutexes/semaphores?
 }CBOS_status_t;
 
-void CBOS_add_priority_queue(uint8_t priority, CBOS_threadInfo_t thread);
+void CBOS_add_priority_queue(CBOS_threadInfo_t *thread);
 
 void CBOS_next_thread(void);
 

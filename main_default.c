@@ -32,6 +32,7 @@ void thread2()
 int main(void) {
 	SystemInit();//set the LEDs to be outputs. You may or may not care about this
 	CBOS_kernel_initialize();
+	
 	printf("\n\n\nSystem initialized!\n");
 	
 	//Creating threads and starting "Kernel" 
