@@ -7,12 +7,14 @@
 #include <stdio.h>
 
 #define THREAD_STACK_SIZE 0x200 //512 byte thread stack. This is a lot.
+#define TICKDELAY 1000
 
 typedef struct CBOS_threadInfo_t{
 	void (*funct_ptr)(); // do we use this?
 	uint32_t stackPtr_address;
 	struct CBOS_threadInfo_t * next;
 	uint8_t priority;
+	uint16_t delay;
 }CBOS_threadInfo_t;
 
 typedef struct {
@@ -65,5 +67,7 @@ extern CBOS_status_t CBOS_threadStatus;
 void set_PSP_new_stackPtr(void);
 
 void CBOS_delay(uint32_t ms);
+
+void CBOS_kernel_thread(void);
 
 #endif
