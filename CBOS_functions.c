@@ -204,7 +204,7 @@ void CBOS_scheduler(void)
 	//MAKE SURE YOU DEFINE AN IDLE THREAD SO WE ALWAYS REACH A THREAD
 	
 	//set the next thread to be the "longest waiting" highest priority ready thread
-	CBOS_threadStatus.next_thread = temp;
+	CBOS_threadStatus.current_thread->next = temp;
 }
 
 void CBOS_set_next_thread(void)
@@ -232,9 +232,9 @@ void CBOS_delay(uint32_t ticks)
 		while (temp->next != NULL)
 			temp = temp->next;
 		temp = CBOS_threadStatus.current_thread;
-	CBOS_threadStatus.current_thread->delay = ticks + CBOS_threadStatus.sysCount;
-	CBOS_threadStatus.current_thread = NULL;
-	
+	temp->delay = ticks + CBOS_threadStatus.sysCount;
+	//call context switch
+	//this is bad check it
 }
 
 
@@ -283,7 +283,5 @@ void CBOS_kernel_thread()
 	CBOS_scheduler();
 	//check if suggested next thread has higher priority than current thread.. 
 	//if not, let thread yield know it should not perform a context switch by setting next_thread to NULL
-	if(CBOS_threadStatus.next_thread->priority > CBOS_threadStatus.current_thread->priority )
-		CBOS_threadStatus.next_thread = NULL;
 	CBOS_thread_yield();
 }
