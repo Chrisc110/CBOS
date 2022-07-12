@@ -15,6 +15,14 @@ typedef struct CBOS_threadInfo_t{
 	uint8_t priority;
 }CBOS_threadInfo_t;
 
+typedef struct {
+	uint8_t thread_count; //eventually remove, we will just update initial_MSP_addr with the "next" thread location
+	CBOS_threadInfo_t * current_thread;
+	uint32_t initial_MSP_addr;
+	CBOS_threadInfo_t * priorityArray[10];
+	//array or linked list to store mutexes/semaphores?
+}CBOS_status_t;
+
 typedef struct{
 	uint8_t count; 
 	CBOS_threadInfo_t blocked_threads; //linked list of all threads waiting on this mutex
@@ -24,18 +32,9 @@ typedef struct{
 	uint8_t count; 
 	CBOS_threadInfo_t blocked_threads; //linked list of all threads waiting on this semaphore
 }CBOS_semaphore_t;
-
-typedef struct {
-	uint8_t thread_count; //eventually remove, we will just update initial_MSP_addr with the "next" thread location
-	CBOS_threadInfo_t * current_thread;
-	uint32_t initial_MSP_addr;
-	CBOS_threadInfo_t * priorityArray[10];
-	//array or linked list to store mutexes/semaphores?
-}CBOS_status_t;
-
 void CBOS_add_priority_queue(CBOS_threadInfo_t *thread);
 
-void CBOS_next_thread(void);
+void CBOS_find_next_thread(void);
 
 void CBOS_create_mutex(void);
 
