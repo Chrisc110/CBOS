@@ -12,13 +12,13 @@ CBOS_status_t CBOS_threadStatus = {
 	{NULL}
 };
 
-void trigger_pendsv(void)
+void CBOS_thread_yield(void)
 {
 	//Determine whether a switch is even necessary � if there is only one task running of that priority, why bother?
 	//if there are no other threads in the same priority queue as the current thread, no context switch is needed 
 	//in the case that a higher priority thread has been unblocked, this will be taken care of when the systick handler is called
-	//if (CBOS_threadStatus.priorityArray[CBOS_threadStatus.current_thread->priority] == NULL)//->thread info?
-		//return;
+	if (CBOS_threadStatus.priorityArray[CBOS_threadStatus.current_thread->priority] == NULL)//->thread info?
+		return;
 
 	//Trigger the PendSV interrupt 
 	volatile uint32_t *icsr = (void*)0xE000ED04; //Interrupt Control/Status Vector
@@ -154,7 +154,6 @@ void CBOS_kernel_initialize(void)
 
 void CBOS_kernel_start(void){
 	
-	
 	/*Setting PSP to first thread address + 14 * 4 (this offset changed to 12*4 for
 		when we tailchained trigger_pendsv() with the systick_handler().
 		When the thread was created, it was initially ready to be run, but
@@ -172,7 +171,7 @@ void CBOS_kernel_start(void){
 	SysTick_Config(SystemCoreClock/200);
 	
 	//Start the first switch
-	trigger_pendsv();
+	CBOS_thread_yield();
 }
 
 void set_PSP_new_stackPtr(){
@@ -190,14 +189,8 @@ void set_PSP_new_stackPtr(){
 	__set_PSP((uint32_t)CBOS_threadStatus.current_thread->stackPtr_address);
 }
 
-void CBOS_find_next_thread(void)
+void CBOS_scheduler(void)
 {
-	//push current thread onto the appropriate priority array	
-	if (CBOS_threadStatus.current_thread != NULL)
-	{
-		CBOS_add_priority_queue(CBOS_threadStatus.current_thread);
-	}
-	
 	uint8_t index = 0;
 	CBOS_threadInfo_t * temp = CBOS_threadStatus.priorityArray[index];
 	
@@ -210,16 +203,87 @@ void CBOS_find_next_thread(void)
 	
 	//MAKE SURE YOU DEFINE AN IDLE THREAD SO WE ALWAYS REACH A THREAD
 	
-	//set the current thread to be the "longest waiting" highest priority ready thread
-	CBOS_threadStatus.current_thread = temp;
+	//set the next thread to be the "longest waiting" highest priority ready thread
+	CBOS_threadStatus.next_thread = temp;
+}
+
+void CBOS_set_next_thread(void)
+{
+	//push current thread onto the appropriate priority array	
+	if (CBOS_threadStatus.current_thread != NULL)
+	{
+		CBOS_add_priority_queue(CBOS_threadStatus.current_thread);
+	}
 	
 	//pop the selected thread from the ready array (queue)
-	CBOS_threadStatus.priorityArray[index] = temp->next;
+	CBOS_threadInfo_t * temp = CBOS_threadStatus.next_thread;
+	CBOS_threadStatus.priorityArray[temp->priority] = temp->next;
 	
 	//make sure it connects to nothing
 	temp->next = NULL;
+}
+
+void CBOS_delay(uint32_t ticks)
+{
+	CBOS_threadInfo_t * temp = CBOS_threadStatus.sleepingHead;
+	if (temp == NULL)
+		temp = CBOS_threadStatus.current_thread;
+	else 
+		while (temp->next != NULL)
+			temp = temp->next;
+		temp = CBOS_threadStatus.current_thread;
+	CBOS_threadStatus.current_thread->delay = ticks + CBOS_threadStatus.sysCount;
+	CBOS_threadStatus.current_thread = NULL;
 	
 }
-void SysTick_Handler(void){
-	trigger_pendsv();
+
+
+void SysTick_Handler(void)
+{
+	CBOS_threadStatus.sysCount = (CBOS_threadStatus.sysCount + 1)%TICKDELAY;
+	if (CBOS_threadStatus.sysCount == TICKDELAY-1)
+		CBOS_kernel_thread();
+}
+
+void CBOS_kernel_thread()
+{
+	//check delayed threads
+	CBOS_threadInfo_t * prev = CBOS_threadStatus.sleepingHead;
+	CBOS_threadInfo_t * temp = prev->next;
+	prev->delay = prev->delay -TICKDELAY;
+	if(prev->delay <=0)
+		{
+			CBOS_threadStatus.sleepingHead = temp;
+			prev->next = NULL;
+			CBOS_add_priority_queue(prev);
+		}
+	while (temp != NULL)
+	{
+		temp->delay = temp->delay -TICKDELAY;
+		if(temp->delay <=0)
+		{
+			if(temp == CBOS_threadStatus.sleepingHead)
+			{
+				CBOS_threadStatus.sleepingHead = temp->next;
+				temp->next = NULL;
+				CBOS_add_priority_queue(temp);
+			}
+			prev = temp->next;
+			temp->next = NULL;
+			CBOS_add_priority_queue(temp);
+		}
+		else
+		{
+			prev = temp;
+			temp = temp->next;
+		}
+	}
+	
+	//run the scheduler
+	CBOS_scheduler();
+	//check if suggested next thread has higher priority than current thread.. 
+	//if not, let thread yield know it should not perform a context switch by setting next_thread to NULL
+	if(CBOS_threadStatus.next_thread->priority > CBOS_threadStatus.current_thread->priority )
+		CBOS_threadStatus.next_thread = NULL;
+	CBOS_thread_yield();
 }

@@ -20,6 +20,8 @@ typedef struct {
 	CBOS_threadInfo_t * current_thread;
 	uint32_t initial_MSP_addr;
 	CBOS_threadInfo_t * priorityArray[10];
+	CBOS_threadInfo_t * sleepingHead;
+	uint16_t sysCount;
 	//array or linked list to store mutexes/semaphores?
 }CBOS_status_t;
 
@@ -50,7 +52,7 @@ void CBOS_semaphore_release(void);
 
 void CBOS_create_thread(void (*funct_ptr)(), uint8_t priority);
 
-void trigger_pendsv(void);
+void CBOS_thread_yield(void);
 
 void idle_thread(void);
 
@@ -61,5 +63,7 @@ void CBOS_kernel_start(void);
 extern CBOS_status_t CBOS_threadStatus;
 
 void set_PSP_new_stackPtr(void);
+
+void CBOS_delay(uint32_t ms);
 
 #endif
