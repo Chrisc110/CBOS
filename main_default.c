@@ -13,7 +13,7 @@ void thread1()
 	while(1)
 	{
 		printf("Thread 1 is running\n");
-		//trigger_pendsv();
+		CBOS_delay(4);
 		printf("Thread 1 part 2 is running\n");
 	}
 }

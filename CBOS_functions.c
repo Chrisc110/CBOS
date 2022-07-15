@@ -14,13 +14,14 @@ CBOS_status_t CBOS_threadStatus = {
 
 void CBOS_context_switch(void)
 {
+	printf("\nswitching da thready\n");
 	//Trigger the PendSV interrupt 
 	volatile uint32_t *icsr = (void*)0xE000ED04; //Interrupt Control/Status Vector
 	*icsr = 0x1<<28; //tell the chip to do the pendsv by writing 1 to the PDNSVSET bit
 
 	//flush things
 		__ASM("isb"); //This just prevents other things in the pipeline from running before we return
-	printf("\nswitching da thready\n");
+	
 	return;
 }
 
@@ -156,16 +157,16 @@ void CBOS_kernel_start(void){
 		where we should be
 	*/
 	CBOS_scheduler();
-	CBOS_threadStatus.current_thread = CBOS_threadStatus.next_thread;
 	CBOS_set_next_thread();
 	CBOS_scheduler();
+	CBOS_add_priority_queue(CBOS_threadStatus.current_thread);
+	
 	__set_CONTROL(1<<1);
 	__set_PSP(CBOS_threadStatus.current_thread->stackPtr_address + 12*4); //cannot guarantee there is a thread here... how else do we decide?
 	
 	//setup systick timer
 	SysTick_Config(SystemCoreClock/200);
-	
-	//Call the scheduler and start the first switch
+
 	CBOS_context_switch();
 }
 
@@ -210,6 +211,7 @@ void CBOS_set_next_thread(void)
 	
 	//make sure it connects to nothing
 	temp->next = NULL;
+	CBOS_threadStatus.current_thread = CBOS_threadStatus.next_thread;
 }
 
 void CBOS_delay(uint32_t ms)
