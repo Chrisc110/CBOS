@@ -37,7 +37,7 @@ int main(void) {
 	
 	//Creating threads and starting "Kernel" 
 	CBOS_create_thread(thread1, 1);
-	CBOS_create_thread(thread2, 2);
+	CBOS_create_thread(thread2, 1);
 
 	CBOS_kernel_start();
 	

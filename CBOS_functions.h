@@ -9,6 +9,8 @@
 #define THREAD_STACK_SIZE 0x200 //512 byte thread stack. This is a lot.
 #define TICKDELAY 1000
 
+#define TIME_BETWEEN_SYSTICK_MS 1
+
 typedef struct CBOS_threadInfo_t{
 	void (*funct_ptr)(); // do we use this?
 	uint32_t stackPtr_address;
@@ -20,10 +22,11 @@ typedef struct CBOS_threadInfo_t{
 typedef struct {
 	uint8_t thread_count; //eventually remove, we will just update initial_MSP_addr with the "next" thread location
 	CBOS_threadInfo_t * current_thread;
+	CBOS_threadInfo_t * next_thread;
 	uint32_t initial_MSP_addr;
 	CBOS_threadInfo_t * priorityArray[10];
 	CBOS_threadInfo_t * sleepingHead;
-	uint16_t sysCount;
+	//uint16_t sysCount;
 	//array or linked list to store mutexes/semaphores?
 }CBOS_status_t;
 
@@ -38,7 +41,9 @@ typedef struct{
 }CBOS_semaphore_t;
 void CBOS_add_priority_queue(CBOS_threadInfo_t *thread);
 
-void CBOS_find_next_thread(void);
+void CBOS_set_next_thread(void);
+
+void CBOS_scheduler(void);
 
 void CBOS_create_mutex(void);
 
@@ -54,7 +59,7 @@ void CBOS_semaphore_release(void);
 
 void CBOS_create_thread(void (*funct_ptr)(), uint8_t priority);
 
-void CBOS_thread_yield(void);
+void CBOS_context_switch(void);
 
 void idle_thread(void);
 
@@ -68,6 +73,8 @@ void set_PSP_new_stackPtr(void);
 
 void CBOS_delay(uint32_t ms);
 
-void CBOS_kernel_thread(void);
+void CBOS_update_sleeping_queue(void);
+
+void CBOS_thread_yield(void);
 
 #endif
