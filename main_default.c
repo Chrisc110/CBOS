@@ -8,13 +8,19 @@
 #include <stdio.h>
 #include "CBOS_functions.h"
 
+
+CBOS_mutex_id_t mutex; 
+uint8_t count = 0;
+	
 void thread1()
 {
 	while(1)
 	{
-		printf("Thread 1 is running\n");
-		CBOS_delay(4);
-		printf("Thread 1 part 2 is running\n");
+		CBOS_mutex_aquire(mutex);
+		count++;
+		printf("Thread 1 is running %d\n", count);
+		CBOS_mutex_release(mutex);
+		CBOS_yield();
 	}
 }
 
@@ -22,9 +28,11 @@ void thread2()
 {
 	while(1)
 	{
-		printf("Thread 2, the cool thread is running!\n");
-		//trigger_pendsv();
-		printf("Thread 2, the cool thread part 2 is running!\n");
+		CBOS_mutex_aquire(mutex);
+		count++;
+		printf("Thread 2 is running %d\n", count);
+		CBOS_mutex_release(mutex);
+		CBOS_yield();
 	}
 }
 
@@ -36,6 +44,7 @@ int main(void) {
 	printf("\n\n\nSystem initialized!\n");
 	
 	//Creating threads and starting "Kernel" 
+	mutex = CBOS_create_mutex();
 	CBOS_create_thread(thread1, 1);
 	CBOS_create_thread(thread2, 1);
 
