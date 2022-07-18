@@ -11,16 +11,18 @@
 
 CBOS_mutex_id_t mutex; 
 uint8_t count = 0;
+
+CBOS_semaphore_id_t semaphore;
 	
 void thread1()
 {
 	while(1)
 	{
-		CBOS_mutex_aquire(mutex);
+		CBOS_semaphore_aquire(semaphore);
 		count++;
 		printf("Thread 1 is running %d\n", count);
-		CBOS_mutex_release(mutex);
-		CBOS_yield();
+		CBOS_semaphore_release(semaphore);
+		//CBOS_yield();
 	}
 }
 
@@ -28,14 +30,13 @@ void thread2()
 {
 	while(1)
 	{
-		CBOS_mutex_aquire(mutex);
+		CBOS_semaphore_aquire(semaphore);
 		count++;
 		printf("Thread 2 is running %d\n", count);
-		CBOS_mutex_release(mutex);
-		CBOS_yield();
+		CBOS_semaphore_release(semaphore);
+		//CBOS_yield();
 	}
 }
-
 
 int main(void) {
 	SystemInit();//set the LEDs to be outputs. You may or may not care about this
@@ -45,6 +46,7 @@ int main(void) {
 	
 	//Creating threads and starting "Kernel" 
 	mutex = CBOS_create_mutex();
+	semaphore = CBOS_create_semaphore(1);
 	CBOS_create_thread(thread1, 1);
 	CBOS_create_thread(thread2, 1);
 

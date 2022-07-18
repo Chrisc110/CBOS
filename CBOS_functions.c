@@ -9,7 +9,6 @@ CBOS_status_t CBOS_threadStatus = {
 	0,
 	NULL,
 	NULL,
-	false,
 	0,
 	{NULL},
 	NULL
@@ -132,7 +131,7 @@ void idle_thread()
 {
 	while(1)
 	{
-		//printf("Idle Thread\n");
+		printf("Idle Thread\n");
 	}
 }
 
@@ -181,14 +180,8 @@ void CBOS_kernel_start(void){
 
 void CBOS_run_kernel(void)
 {
-	__disable_irq();
+	__disable_irq();	
 	CBOS_run_scheduler();
-
-	if (CBOS_threadStatus.isCurrentThreadYield)
-	{
-		CBOS_add_priority_queue(CBOS_threadStatus.current_thread);
-		CBOS_threadStatus.isCurrentThreadYield = false;
-	}
 
 	if (CBOS_threadStatus.next_thread != CBOS_threadStatus.current_thread)
 	{
@@ -199,6 +192,35 @@ void CBOS_run_kernel(void)
 	//else do nothing
 
 }
+
+//not used so far
+void CBOS_update_mutex_threads(void)
+{
+	CBOS_mutex_t * current = CBOS_threadStatus.mutex_head;
+	
+	while(current != NULL)
+	{
+		if (current->count == 1)
+		{
+			//pop the next blocked thread waiting on that mutex
+			if (current->blocked_head != NULL)
+			{
+				//get the first blcoked thread
+				CBOS_threadInfo_t * temp = current->blocked_head;
+				//make the new blocked head the next one waiting
+				current->blocked_head = current->blocked_head->next;
+					
+				//cut the old head off
+				temp->next = NULL;
+					
+				//add it to the ready queue
+				CBOS_add_priority_queue(temp);
+			}
+		}
+		current = current->next;
+	}
+}
+
 
 void CBOS_run_scheduler(void)
 {
@@ -306,12 +328,13 @@ void CBOS_delay(uint32_t ms)
 
 void CBOS_yield(void)
 {
-	CBOS_threadStatus.isCurrentThreadYield = true;
+	CBOS_add_priority_queue(CBOS_threadStatus.current_thread);
 	CBOS_run_kernel();
 }
 
 CBOS_mutex_id_t CBOS_create_mutex(void)
 {
+	__disable_irq();
 	CBOS_mutex_t * mutex = (CBOS_mutex_t*)malloc(sizeof(CBOS_mutex_t));
 	mutex->count = 1;
 	mutex->owner = NULL;
@@ -333,7 +356,7 @@ CBOS_mutex_id_t CBOS_create_mutex(void)
 		}
 		temp->next = mutex;
 	}
-	
+	__enable_irq();
 	id.mutexId = count;
 	return id;
 }
@@ -383,13 +406,104 @@ void CBOS_mutex_release(CBOS_mutex_id_t calledMutex)
 		mutex = mutex->next;
 	if (mutex->owner == CBOS_threadStatus.current_thread)
 	{
-		mutex->count = 1;		
 		CBOS_threadInfo_t * temp = mutex->blocked_head;
 		if(mutex->blocked_head != NULL)
 		{
 			mutex->blocked_head = mutex->blocked_head->next;
 			temp->next = NULL;
 			CBOS_add_priority_queue(temp);
+		}
+		else
+			mutex->count = 1;
+	}
+	__enable_irq();
+}
+
+CBOS_semaphore_id_t CBOS_create_semaphore(uint8_t max_count)
+{
+	__disable_irq();
+	CBOS_semaphore_t * semaphore = (CBOS_semaphore_t*)malloc(sizeof(CBOS_semaphore_t));
+	semaphore->count = 1;
+	semaphore->max_count = max_count;
+	semaphore->next = NULL;
+	semaphore->blocked_head = NULL;
+	
+	CBOS_semaphore_t * temp = CBOS_threadStatus.semaphore_head;
+	
+	uint8_t count = 0;
+	CBOS_semaphore_id_t id;
+	if (temp == NULL)
+		CBOS_threadStatus.semaphore_head = semaphore;
+	else
+	{
+		while(temp->next!=NULL)
+		{
+			count++;
+			temp = temp->next;
+		}
+		temp->next = semaphore;
+	}
+	__enable_irq();
+	
+	id.semaphoreId = count;
+
+	return id;
+}
+
+void CBOS_semaphore_aquire(CBOS_semaphore_id_t calledSemaphore)
+{
+	__disable_irq();
+	
+	CBOS_semaphore_t * semaphore = CBOS_threadStatus.semaphore_head;
+	for (uint8_t i = 0; i < calledSemaphore.semaphoreId; i++)
+		semaphore = semaphore->next;
+	if (semaphore->count == 0)
+	{
+		CBOS_threadInfo_t * temp = semaphore->blocked_head;
+		if (temp == NULL)
+		{
+			semaphore->blocked_head = CBOS_threadStatus.current_thread;
+		} 
+		
+		else 
+		{
+			while (temp->next != NULL)
+				temp = temp->next;
+
+			temp = CBOS_threadStatus.current_thread;
+		}
+		
+		//__enable_irq();
+		
+		//blocked
+		CBOS_run_kernel();
+	}
+	else 
+	{
+		semaphore->count --;
+	}
+	__enable_irq();
+}
+
+void CBOS_semaphore_release(CBOS_semaphore_id_t calledSemaphore)
+{
+	__disable_irq();
+	printf("release");
+	CBOS_semaphore_t * semaphore = CBOS_threadStatus.semaphore_head;
+	for (uint8_t i = 0; i < calledSemaphore.semaphoreId; i++)
+		semaphore = semaphore->next;
+	if (semaphore->count < semaphore->max_count)
+	{
+		CBOS_threadInfo_t * temp = semaphore->blocked_head;
+		if(semaphore->blocked_head != NULL)
+		{
+			semaphore->blocked_head = semaphore->blocked_head->next;
+			temp->next = NULL;
+			CBOS_add_priority_queue(temp);
+		}
+		else
+		{
+			semaphore->count ++;
 		}
 	}
 	__enable_irq();
