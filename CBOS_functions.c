@@ -269,7 +269,7 @@ void SysTick_Handler(void){
 	CBOS_threadStatus.system_count++;
 	//check delayed threads and put them back to ready queue if done
 	CBOS_update_sleeping_queue();
-	if (CBOS_threadStatus.system_count % TIMESLICE)
+	if (CBOS_threadStatus.system_count % TIMESLICE == 0)
 	{
 		//check delayed threads and put them back to ready queue if done
 		//put current thread back in ready queue
@@ -285,7 +285,7 @@ void SysTick_Handler(void){
 
 void CBOS_update_sleeping_queue(void)
 {
-	if (CBOS_threadStatus.system_count % SLEEPING_THREAD_MIN_DELAY)
+	if (CBOS_threadStatus.system_count % SLEEPING_THREAD_MIN_DELAY == 0)
 	{
 		CBOS_threadInfo_t * prev = NULL;
 		CBOS_threadInfo_t * current = CBOS_threadStatus.sleepingHead;
@@ -293,9 +293,15 @@ void CBOS_update_sleeping_queue(void)
 		
 		while (current != NULL)
 		{
-			current->delay -= SLEEPING_THREAD_MIN_DELAY;
+			//checking underflow
+			if (current->delay - SLEEPING_THREAD_MIN_DELAY > current->delay)
+			{
+				current->delay = 0;
+			}
+			else
+				current->delay -= SLEEPING_THREAD_MIN_DELAY;
 			
-			if(current->delay <=0)
+			if(current->delay == 0)
 			{
 				if(current == CBOS_threadStatus.sleepingHead)
 				{
@@ -336,7 +342,7 @@ void CBOS_delay(uint32_t ms)
 		while (temp->next != NULL)
 			temp = temp->next;
 
-		temp = CBOS_threadStatus.current_thread;
+		temp->next = CBOS_threadStatus.current_thread;
 	}
 	temp->delay = ms + 1;
 
@@ -459,6 +465,7 @@ CBOS_semaphore_id_t CBOS_create_semaphore(uint8_t max_count, uint8_t starting_co
 			count++;
 			temp = temp->next;
 		}
+		count++;
 		temp->next = semaphore;
 	}
 	__enable_irq();
@@ -506,7 +513,6 @@ void CBOS_semaphore_aquire(CBOS_semaphore_id_t calledSemaphore)
 void CBOS_semaphore_release(CBOS_semaphore_id_t calledSemaphore)
 {
 	__disable_irq();
-	printf("release");
 	CBOS_semaphore_t * semaphore = CBOS_threadStatus.semaphore_head;
 	for (uint8_t i = 0; i < calledSemaphore.semaphoreId; i++)
 		semaphore = semaphore->next;

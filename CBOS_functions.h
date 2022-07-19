@@ -8,7 +8,7 @@
 
 #define THREAD_STACK_SIZE 0x200 //512 byte thread stack. This is a lot.
 #define SLEEPING_THREAD_MIN_DELAY 1 //ms
-#define TIMESLICE 5 //ms
+#define TIMESLICE 1000 //ms
 
 
 typedef struct CBOS_threadInfo_t{
