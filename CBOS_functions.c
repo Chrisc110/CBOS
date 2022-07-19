@@ -437,11 +437,11 @@ void CBOS_mutex_release(CBOS_mutex_id_t calledMutex)
 	__enable_irq();
 }
 
-CBOS_semaphore_id_t CBOS_create_semaphore(uint8_t max_count)
+CBOS_semaphore_id_t CBOS_create_semaphore(uint8_t max_count, uint8_t starting_count)
 {
 	__disable_irq();
 	CBOS_semaphore_t * semaphore = (CBOS_semaphore_t*)malloc(sizeof(CBOS_semaphore_t));
-	semaphore->count = 1;
+	semaphore->count = starting_count;
 	semaphore->max_count = max_count;
 	semaphore->next = NULL;
 	semaphore->blocked_head = NULL;

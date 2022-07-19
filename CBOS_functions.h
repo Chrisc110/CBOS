@@ -63,7 +63,7 @@ void CBOS_mutex_aquire(CBOS_mutex_id_t calledMutex);
 
 void CBOS_mutex_release(CBOS_mutex_id_t calledMutex);
 
-CBOS_semaphore_id_t CBOS_create_semaphore(uint8_t max_count);
+CBOS_semaphore_id_t CBOS_create_semaphore(uint8_t max_count, uint8_t starting_count);
 
 void CBOS_semaphore_aquire(CBOS_semaphore_id_t calledSemaphore);
 

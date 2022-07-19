@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include "CBOS_functions.h"
 
+#define CASE 2
 
 CBOS_mutex_id_t mutex; 
 uint32_t count = 0;
@@ -35,11 +36,50 @@ void case1_thread2()
 	}
 }
 
+uint8_t n = 3; 
+uint8_t count = 0;
+CBOS_mutex_id_t c2_mutex;
+CBOS_semaphore_id_t c2_turnstile1; //start at 1
+CBOS_semaphore_id_t c2_turnstile2; //start at 2
+
+void synchronize(uint8_t thread_num)
+{
+	//taken directly from the lecture notes
+
+	CBOS_mutex_aquire(c2_mutex);
+	count++;
+	if (count == n)
+	{
+		CBOS_semaphore_aquire(c2_turnstile2);
+		CBOS_semaphore_release(c2_turnstile1);
+	}
+	CBOS_mutex_release(c2_mutex);
+
+	CBOS_semaphore_aquire(c2_turnstile1);
+	CBOS_semaphore_release(c2_turnstile1);
+
+	printf("Thread %d part 1\n", thread_num);
+
+	CBOS_mutex_aquire(c2_mutex);
+	count--;
+	if (count == 0)
+	{
+		CBOS_semaphore_aquire(c2_turnstile1);
+		CBOS_semaphore_release(c2_turnstile2);
+	}
+	CBOS_mutex_release(c2_mutex);
+
+	CBOS_semaphore_aquire(c2_turnstile2);
+	CBOS_semaphore_release(c2_turnstile2);
+
+	printf("Thread %d part 2\n", thread_num);
+}
+
 void case2_thread1()
 {
 	while(1)
 	{
-		printf("Thread 1 is running\n");
+		synchronize(1);	
 	}
 }
 
@@ -47,10 +87,45 @@ void case2_thread2()
 {
 	while(1)
 	{
-		printf("Thread 2 is running\n");
+		synchronize(2);	
 	}
 }
 
+void case2_thread3()
+{
+	while(1)
+	{
+		synchronize(3);	
+	}
+}
+
+void case3_thread1()
+{
+	while(1)
+	{
+		printf("Thread 1 is running");
+		delay(10);
+	}
+}
+
+void case3_thread2()
+{
+	while(1)
+	{
+		printf("Thread 2 is running");
+		delay(20)
+	}
+}
+
+void case3_thread3()
+{
+	while(1)
+	{
+		for (uint8_t i = 0; i < 30; i++)
+			printf("Thread 3 is running");
+		CBOS_yield();
+	}
+}
 
 
 int main(void) {
@@ -60,10 +135,33 @@ int main(void) {
 	printf("\n\n\nSystem initialized!\n");
 	
 	//Creating threads and starting "Kernel" 
-	mutex = CBOS_create_mutex();
-	semaphore = CBOS_create_semaphore(1);
-	CBOS_create_thread(case2_thread1, 1);
-	CBOS_create_thread(case2_thread2, 1);
+	if (CASE == 1)
+	{
+		mutex = CBOS_create_mutex();
+		semaphore = CBOS_create_semaphore(1);
+		CBOS_create_thread(case2_thread1, 1);
+		CBOS_create_thread(case2_thread2, 1);
+	}
+
+	else if (CASE == 2)
+	{
+		CBOS_mutex_id_t c2_mutex;
+		CBOS_semaphore_id_t c2_turnstile1; //start at 1
+		CBOS_semaphore_id_t c2_turnstile2;
+
+		c2_mutex = CBOS_create_mutex();
+		c2_turnstile1 = CBOS_create_semaphore(3, 0);
+		c2_turnstile2 = CBOS_create_semaphore(3, 1);
+
+		CBOS_create_thread(case2_thread1, 1);
+		CBOS_create_thread(case2_thread2, 1);
+		CBOS_create_thread(case2_thread3, 1);
+	}
+
+	else if (CASE == 3)
+	{
+
+	}
 
 	CBOS_kernel_start();
 	
