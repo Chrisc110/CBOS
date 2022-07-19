@@ -7,6 +7,7 @@
 //Initializing the thread status structure
 CBOS_status_t CBOS_threadStatus = {
 	0,
+	0,
 	NULL,
 	NULL,
 	0,
@@ -21,7 +22,7 @@ void contex_switch(void)
 	//in the case that a higher priority thread has been unblocked, this will be taken care of when the systick handler is called
 	//if (CBOS_threadStatus.priorityArray[CBOS_threadStatus.current_thread->priority] == NULL)//->thread info?
 		//return;
-
+	__enable_irq();
 	//Trigger the PendSV interrupt 
 	volatile uint32_t *icsr = (void*)0xE000ED04; //Interrupt Control/Status Vector
 	*icsr = 0x1<<28; //tell the chip to do the pendsv by writing 1 to the PDNSVSET bit
@@ -34,6 +35,7 @@ void contex_switch(void)
 
 void CBOS_add_priority_queue(CBOS_threadInfo_t * thread)
 {
+	__disable_irq();
 	if (CBOS_threadStatus.priorityArray[thread->priority] == NULL)
 		CBOS_threadStatus.priorityArray[thread->priority] = thread;
 	else
@@ -43,6 +45,7 @@ void CBOS_add_priority_queue(CBOS_threadInfo_t * thread)
 			temp = temp->next;
 		temp->next = thread;
 	}
+	__enable_irq();
 }
 
 void CBOS_create_thread(void (*funct_ptr)(), uint8_t priority)
@@ -54,7 +57,9 @@ void CBOS_create_thread(void (*funct_ptr)(), uint8_t priority)
 	//update structure with function pointer and priority
 	CBOS_threadInfo_t * new_thread = (CBOS_threadInfo_t*)malloc(sizeof(CBOS_threadInfo_t));
 	new_thread->funct_ptr = funct_ptr;
-	new_thread->priority = priority;	
+	new_thread->priority = priority;
+	new_thread->next = NULL;
+	
 	
 	//update structure with stack pointer
 	new_thread->stackPtr_address = CBOS_threadStatus.initial_MSP_addr - THREAD_STACK_SIZE * CBOS_threadStatus.thread_count;
@@ -172,7 +177,7 @@ void CBOS_kernel_start(void){
 	__set_PSP(CBOS_threadStatus.current_thread->stackPtr_address + 12*4); //cannot guarantee there is a thread here... how else do we decide?
 	
 	//setup systick timer
-	SysTick_Config(SystemCoreClock/100);
+	SysTick_Config(SystemCoreClock/1000);
 	
 	//Start the first switch
 	contex_switch();
@@ -185,12 +190,10 @@ void CBOS_run_kernel(void)
 
 	if (CBOS_threadStatus.next_thread != CBOS_threadStatus.current_thread)
 	{
-		__enable_irq();
 		contex_switch();
 	}
 	__enable_irq();
 	//else do nothing
-
 }
 
 //not used so far
@@ -258,47 +261,61 @@ void set_PSP_new_stackPtr(){
 	__set_PSP((uint32_t)CBOS_threadStatus.next_thread->stackPtr_address);
 	
 	CBOS_threadStatus.current_thread = CBOS_threadStatus.next_thread;
+	
+	CBOS_threadStatus.next_thread = NULL;
 }
 
 void SysTick_Handler(void){
+	CBOS_threadStatus.system_count++;
 	//check delayed threads and put them back to ready queue if done
 	CBOS_update_sleeping_queue();
-	//put current thread back in ready queue
-	CBOS_add_priority_queue(CBOS_threadStatus.current_thread);
-	//run kernel
-	CBOS_run_kernel();
+	if (CBOS_threadStatus.system_count % TIMESLICE)
+	{
+		//check delayed threads and put them back to ready queue if done
+		//put current thread back in ready queue
+		if (CBOS_threadStatus.next_thread == NULL)
+		{
+			CBOS_add_priority_queue(CBOS_threadStatus.current_thread);
+			//run kernel
+			CBOS_run_kernel();
+		}
+	}
+
 }
 
 void CBOS_update_sleeping_queue(void)
 {
-	CBOS_threadInfo_t * prev = NULL;
-	CBOS_threadInfo_t * current = CBOS_threadStatus.sleepingHead;
-	CBOS_threadInfo_t * delete_node = NULL;
-	
-	while (current != NULL)
+	if (CBOS_threadStatus.system_count % SLEEPING_THREAD_MIN_DELAY)
 	{
-		current->delay -= TIME_BETWEEN_SYSTICK_MS;
+		CBOS_threadInfo_t * prev = NULL;
+		CBOS_threadInfo_t * current = CBOS_threadStatus.sleepingHead;
+		CBOS_threadInfo_t * delete_node = NULL;
 		
-		if(current->delay <=0)
+		while (current != NULL)
 		{
-			if(current == CBOS_threadStatus.sleepingHead)
+			current->delay -= SLEEPING_THREAD_MIN_DELAY;
+			
+			if(current->delay <=0)
 			{
-				CBOS_threadStatus.sleepingHead = current->next;
+				if(current == CBOS_threadStatus.sleepingHead)
+				{
+					CBOS_threadStatus.sleepingHead = current->next;
+				}
+				
+				delete_node = current;
+				current = current->next;
+				
+				delete_node->next = NULL;
+				CBOS_add_priority_queue(delete_node);
+				if (prev != NULL)
+					prev->next = current;
 			}
 			
-			delete_node = current;
-			current = current->next;
-			
-			delete_node->next = NULL;
-			CBOS_add_priority_queue(delete_node);
-			if (prev != NULL)
-				prev->next = current;
-		}
-		
-		else
-		{
-			prev = current;
-			current = current->next;
+			else
+			{
+				prev = current;
+				current = current->next;
+			}
 		}
 	}
 }
@@ -412,6 +429,7 @@ void CBOS_mutex_release(CBOS_mutex_id_t calledMutex)
 			mutex->blocked_head = mutex->blocked_head->next;
 			temp->next = NULL;
 			CBOS_add_priority_queue(temp);
+			mutex->owner = temp;
 		}
 		else
 			mutex->count = 1;

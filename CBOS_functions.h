@@ -7,7 +7,10 @@
 #include <stdio.h>
 
 #define THREAD_STACK_SIZE 0x200 //512 byte thread stack. This is a lot.
-#define TIME_BETWEEN_SYSTICK_MS 1
+#define SLEEPING_THREAD_MIN_DELAY 1 //ms
+#define TIMESLICE 5 //ms
+
+
 typedef struct CBOS_threadInfo_t{
 	void (*funct_ptr)(); // do we use this?
 	uint32_t stackPtr_address;
@@ -39,6 +42,7 @@ typedef struct{
 }CBOS_semaphore_id_t;
 
 typedef struct {
+	uint32_t system_count;
 	uint8_t thread_count; //eventually remove, we will just update initial_MSP_addr with the "next" thread location
 	CBOS_threadInfo_t * current_thread;
 	CBOS_threadInfo_t * next_thread;
@@ -47,7 +51,6 @@ typedef struct {
 	CBOS_threadInfo_t * sleepingHead;
 	CBOS_mutex_t * mutex_head;
 	CBOS_semaphore_t * semaphore_head;
-	//array or linked list to store mutexes/semaphores?
 }CBOS_status_t;
 
 void CBOS_add_priority_queue(CBOS_threadInfo_t *thread);
