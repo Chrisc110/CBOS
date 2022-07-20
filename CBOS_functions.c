@@ -136,7 +136,8 @@ void idle_thread()
 {
 	while(1)
 	{
-		printf("Idle Thread\n");
+		CBOS_yield();
+		//printf("Idle Thread\n");
 	}
 }
 
@@ -172,12 +173,11 @@ void CBOS_kernel_start(void){
 
 	CBOS_run_scheduler();
 	CBOS_threadStatus.current_thread = CBOS_threadStatus.next_thread;
-	
 	__set_CONTROL(1<<1);
 	__set_PSP(CBOS_threadStatus.current_thread->stackPtr_address + 12*4); //cannot guarantee there is a thread here... how else do we decide?
 	
 	//setup systick timer
-	SysTick_Config(SystemCoreClock/1000);
+	SysTick_Config(SystemCoreClock/200);
 	
 	//Start the first switch
 	contex_switch();
@@ -405,7 +405,7 @@ void CBOS_mutex_aquire(CBOS_mutex_id_t calledMutex)
 			while (temp->next != NULL)
 				temp = temp->next;
 
-			temp = CBOS_threadStatus.current_thread;
+			temp->next = CBOS_threadStatus.current_thread;
 		}
 		
 		__enable_irq();
@@ -495,7 +495,7 @@ void CBOS_semaphore_aquire(CBOS_semaphore_id_t calledSemaphore)
 			while (temp->next != NULL)
 				temp = temp->next;
 
-			temp = CBOS_threadStatus.current_thread;
+			temp->next = CBOS_threadStatus.current_thread;
 		}
 		
 		//__enable_irq();

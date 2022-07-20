@@ -8,11 +8,13 @@
 #include <stdio.h>
 #include "CBOS_functions.h"
 
-#define CASE 2
+#define CASE 3
 
 CBOS_mutex_id_t mutex; 
 uint32_t count = 0;
 CBOS_semaphore_id_t semaphore;
+CBOS_semaphore_id_t c2_turnstile1; //start at 1
+CBOS_semaphore_id_t c2_turnstile2;
 	
 void case1_thread1()
 {
@@ -20,6 +22,7 @@ void case1_thread1()
 	{
 		CBOS_mutex_aquire(mutex);
 		count++;
+		CBOS_delay(100);
 		printf("Thread 1 is running: %d\n", count);
 		CBOS_mutex_release(mutex);
 	}
@@ -31,6 +34,7 @@ void case1_thread2()
 	{
 		CBOS_mutex_aquire(mutex);
 		count++;
+		CBOS_delay(100);
 		printf("Thread 2 is running: %d\n", count);
 		CBOS_mutex_release(mutex);
 	}
@@ -45,8 +49,8 @@ CBOS_semaphore_id_t c2_turnstile2; //start at 2
 void synchronize(uint8_t thread_num)
 {
 	//taken directly from the lecture notes
-
 	CBOS_mutex_aquire(c2_mutex);
+	CBOS_delay(thread_num*100);
 	c2_count++;
 	if (c2_count == n)
 	{
@@ -54,7 +58,9 @@ void synchronize(uint8_t thread_num)
 		CBOS_semaphore_release(c2_turnstile1);
 	}
 	CBOS_mutex_release(c2_mutex);
-
+	
+	printf("Thread %d waiting\n", thread_num);
+	
 	CBOS_semaphore_aquire(c2_turnstile1);
 	CBOS_semaphore_release(c2_turnstile1);
 
@@ -64,6 +70,7 @@ void synchronize(uint8_t thread_num)
 	c2_count--;
 	if (c2_count == 0)
 	{
+		CBOS_delay(thread_num*100);
 		CBOS_semaphore_aquire(c2_turnstile1);
 		CBOS_semaphore_release(c2_turnstile2);
 	}
@@ -105,7 +112,7 @@ void case3_thread1()
 	{
 		for (uint8_t i = 0; i < 200; i++)
 			printf("Thread 1 is running\n");
-		CBOS_delay(2000);
+		CBOS_delay(200);
 	}
 }
 
@@ -145,8 +152,6 @@ int main(void) {
 	else if (CASE == 2)
 	{
 		CBOS_mutex_id_t c2_mutex;
-		CBOS_semaphore_id_t c2_turnstile1; //start at 1
-		CBOS_semaphore_id_t c2_turnstile2;
 
 		c2_mutex = CBOS_create_mutex();
 		c2_turnstile1 = CBOS_create_semaphore(6, 0);
@@ -165,7 +170,7 @@ int main(void) {
 	{
 		CBOS_create_thread(case3_thread1, 1);
 		CBOS_create_thread(case3_thread2, 2);
-		//CBOS_create_thread(case3_thread3, 2);
+		CBOS_create_thread(case3_thread3, 2);
 	}
 
 	CBOS_kernel_start();
