@@ -1,20 +1,14 @@
-/*
- * Default main.c for rtos lab.
- * @author Andrew Morton, 2018
- */
 #include <LPC17xx.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include "CBOS_functions.h"
 
-#define CASE 3
+#define CASE 3 //Change this to run the different test cases 1-3
 
+/****************************** TEST CASE 1 *****************************/
 CBOS_mutex_id_t mutex; 
 uint32_t count = 0;
-CBOS_semaphore_id_t semaphore;
-CBOS_semaphore_id_t c2_turnstile1; //start at 1
-CBOS_semaphore_id_t c2_turnstile2;
 	
 void case1_thread1()
 {
@@ -40,15 +34,16 @@ void case1_thread2()
 	}
 }
 
+/****************************** TEST CASE 2 *****************************/
 uint8_t n = 3; 
 uint8_t c2_count = 0;
 CBOS_mutex_id_t c2_mutex;
-CBOS_semaphore_id_t c2_turnstile1; //start at 1
-CBOS_semaphore_id_t c2_turnstile2; //start at 2
+CBOS_semaphore_id_t c2_turnstile1; //initial value at 0
+CBOS_semaphore_id_t c2_turnstile2; //initial value at 1
 
 void synchronize(uint8_t thread_num)
 {
-	//taken directly from the lecture notes
+	// This code is taken directly from the lecture notes and implements a reusable synchronizing barrier
 	CBOS_mutex_aquire(c2_mutex);
 	CBOS_delay(thread_num*100);
 	c2_count++;
@@ -86,6 +81,7 @@ void case2_thread1()
 {
 	while(1)
 	{
+		//implement the synchronizing barrier
 		synchronize(1);	
 	}
 }
@@ -94,6 +90,7 @@ void case2_thread2()
 {
 	while(1)
 	{
+		//implement the synchronizing barrier
 		synchronize(2);	
 	}
 }
@@ -102,6 +99,7 @@ void case2_thread3()
 {
 	while(1)
 	{
+		//implement the synchronizing barrier
 		synchronize(3);	
 	}
 }
@@ -110,12 +108,15 @@ void case3_thread1()
 {
 	while(1)
 	{
+		//to ensure we see this thread running on the serial console
 		for (uint8_t i = 0; i < 200; i++)
 			printf("Thread 1 is running\n");
-		CBOS_delay(200);
+
+		CBOS_delay(200); //delay to allow other threads to run
 	}
 }
 
+//this thread is run co-operatively with thread 3
 void case3_thread2()
 {
 	while(1)
@@ -137,11 +138,11 @@ void case3_thread3()
 
 int main(void) {
 	SystemInit();//set the LEDs to be outputs. You may or may not care about this
-	CBOS_kernel_initialize();
+	CBOS_kernel_initialize(); 
 	
 	printf("\n\n\nSystem initialized!\n");
 	
-	//Creating threads and starting "Kernel" 
+	//creating the test case threads
 	if (CASE == 1)
 	{
 		mutex = CBOS_create_mutex();
@@ -156,10 +157,6 @@ int main(void) {
 		c2_mutex = CBOS_create_mutex();
 		c2_turnstile1 = CBOS_create_semaphore(6, 0);
 		c2_turnstile2 = CBOS_create_semaphore(6, 1);
-		
-		printf("Turn 1: %d\n", c2_turnstile1.semaphoreId);
-		printf("Turn 2: %d\n", c2_turnstile2.semaphoreId);
-
 
 		CBOS_create_thread(case2_thread1, 1);
 		CBOS_create_thread(case2_thread2, 1);

@@ -15,13 +15,12 @@ CBOS_status_t CBOS_threadStatus = {
 	NULL
 };
 
-void contex_switch(void)
+void context_switch(void)
 {
-	//Determine whether a switch is even necessary � if there is only one task running of that priority, why bother?
+	//Determine whether a switch is even necessary if there is only one task running of that priority, why bother?
 	//if there are no other threads in the same priority queue as the current thread, no context switch is needed 
 	//in the case that a higher priority thread has been unblocked, this will be taken care of when the systick handler is called
-	//if (CBOS_threadStatus.priorityArray[CBOS_threadStatus.current_thread->priority] == NULL)//->thread info?
-		//return;
+	
 	__enable_irq();
 	//Trigger the PendSV interrupt 
 	volatile uint32_t *icsr = (void*)0xE000ED04; //Interrupt Control/Status Vector
@@ -35,11 +34,14 @@ void contex_switch(void)
 
 void CBOS_add_priority_queue(CBOS_threadInfo_t * thread)
 {
-	__disable_irq();
+	__disable_irq(); //disable interrupts to ensure we are not interrupted in this important process
+
+	//first check if the element of the array is empty
 	if (CBOS_threadStatus.priorityArray[thread->priority] == NULL)
 		CBOS_threadStatus.priorityArray[thread->priority] = thread;
+	
 	else
-	{
+	{	//find the end of the linked list and populate it
 		CBOS_threadInfo_t * temp = CBOS_threadStatus.priorityArray[thread->priority];
 		while (!(temp->next == NULL))
 			temp = temp->next;
@@ -50,7 +52,6 @@ void CBOS_add_priority_queue(CBOS_threadInfo_t * thread)
 
 void CBOS_create_thread(void (*funct_ptr)(), uint8_t priority)
 {
-	
 	//increment thread count
 	CBOS_threadStatus.thread_count++;
 	
@@ -136,8 +137,8 @@ void idle_thread()
 {
 	while(1)
 	{
+		//do nothing and yield to check if any threads have become available before the systick
 		CBOS_yield();
-		//printf("Idle Thread\n");
 	}
 }
 
@@ -162,7 +163,6 @@ void CBOS_kernel_initialize(void)
 
 void CBOS_kernel_start(void){
 	
-	
 	/*Setting PSP to first thread address + 14 * 4 (this offset changed to 12*4 for
 		when we tailchained trigger_pendsv() with the systick_handler().
 		When the thread was created, it was initially ready to be run, but
@@ -172,58 +172,34 @@ void CBOS_kernel_start(void){
 	*/
 
 	CBOS_run_scheduler();
+
+	//Set the current thread to run the thread that the scheduler found
 	CBOS_threadStatus.current_thread = CBOS_threadStatus.next_thread;
+
 	__set_CONTROL(1<<1);
 	__set_PSP(CBOS_threadStatus.current_thread->stackPtr_address + 12*4); //cannot guarantee there is a thread here... how else do we decide?
 	
 	//setup systick timer
-	SysTick_Config(SystemCoreClock/200);
+	SysTick_Config(SystemCoreClock/1000);
 	
 	//Start the first switch
-	contex_switch();
+	context_switch();
 }
 
 void CBOS_run_kernel(void)
 {
-	__disable_irq();	
+	__disable_irq();
+
+	//first run the scheduler to determine the next thread to run
 	CBOS_run_scheduler();
 
+	//only context switch if the thread the scheduler choose is different than the current thread running
 	if (CBOS_threadStatus.next_thread != CBOS_threadStatus.current_thread)
 	{
-		contex_switch();
+		context_switch();
 	}
 	__enable_irq();
-	//else do nothing
 }
-
-//not used so far
-void CBOS_update_mutex_threads(void)
-{
-	CBOS_mutex_t * current = CBOS_threadStatus.mutex_head;
-	
-	while(current != NULL)
-	{
-		if (current->count == 1)
-		{
-			//pop the next blocked thread waiting on that mutex
-			if (current->blocked_head != NULL)
-			{
-				//get the first blcoked thread
-				CBOS_threadInfo_t * temp = current->blocked_head;
-				//make the new blocked head the next one waiting
-				current->blocked_head = current->blocked_head->next;
-					
-				//cut the old head off
-				temp->next = NULL;
-					
-				//add it to the ready queue
-				CBOS_add_priority_queue(temp);
-			}
-		}
-		current = current->next;
-	}
-}
-
 
 void CBOS_run_scheduler(void)
 {
@@ -237,7 +213,7 @@ void CBOS_run_scheduler(void)
 		temp = CBOS_threadStatus.priorityArray[index];
 	}
 	
-	//MAKE SURE YOU DEFINE AN IDLE THREAD SO WE ALWAYS REACH A THREAD
+	//there is an idle thread so if there are no other available threads, it will be chosen
 	
 	//set the current thread to be the "longest waiting" highest priority ready thread
 	CBOS_threadStatus.next_thread = temp;
@@ -259,23 +235,31 @@ void set_PSP_new_stackPtr(){
 	
 	//set the PSP for the new thread
 	__set_PSP((uint32_t)CBOS_threadStatus.next_thread->stackPtr_address);
+
 	
+	//actually set the current thread to the thread the scheduler chose
 	CBOS_threadStatus.current_thread = CBOS_threadStatus.next_thread;
 	
+	//set the "next_thread" to NULL to signify it has been used
 	CBOS_threadStatus.next_thread = NULL;
 }
 
 void SysTick_Handler(void){
+	//increment the system count which is used to get different timeslices
 	CBOS_threadStatus.system_count++;
-	//check delayed threads and put them back to ready queue if done
+
+	//check delayed/sleeping threads and put them back to ready queue if done
 	CBOS_update_sleeping_queue();
+
+	//only if the timeslice is up, run the kernel
 	if (CBOS_threadStatus.system_count % TIMESLICE == 0)
 	{
-		//check delayed threads and put them back to ready queue if done
-		//put current thread back in ready queue
+		//this check is necessary to ensure no other "context switching" event already choose a next thread to run
 		if (CBOS_threadStatus.next_thread == NULL)
 		{
+			//add the current thread to the priority queue
 			CBOS_add_priority_queue(CBOS_threadStatus.current_thread);
+
 			//run kernel
 			CBOS_run_kernel();
 		}
@@ -285,6 +269,7 @@ void SysTick_Handler(void){
 
 void CBOS_update_sleeping_queue(void)
 {
+	//only if the smallest resolution (or tick) has passed should we update the sleeping queues
 	if (CBOS_threadStatus.system_count % SLEEPING_THREAD_MIN_DELAY == 0)
 	{
 		CBOS_threadInfo_t * prev = NULL;
@@ -298,9 +283,11 @@ void CBOS_update_sleeping_queue(void)
 			{
 				current->delay = 0;
 			}
+
 			else
 				current->delay -= SLEEPING_THREAD_MIN_DELAY;
 			
+			//if the delay is over, pop the thread from the sleeping queue and add it to the priority queue
 			if(current->delay == 0)
 			{
 				if(current == CBOS_threadStatus.sleepingHead)
@@ -326,11 +313,11 @@ void CBOS_update_sleeping_queue(void)
 	}
 }
 
-void CBOS_delay(uint32_t ms)
-{
-	//the delay will be in terms of ms bec our systick handler will fire every 1ms
-	
+void CBOS_delay(uint32_t ticks)
+{	
 	CBOS_threadInfo_t * temp = CBOS_threadStatus.sleepingHead;
+
+	//check if there are currently no threads in the sleeping queue
 	if (temp == NULL)
 	{
 		temp = CBOS_threadStatus.current_thread;
@@ -339,31 +326,36 @@ void CBOS_delay(uint32_t ms)
 	
 	else 
 	{
+		//find the end of the sleeping queue and add the current thread that called delay
 		while (temp->next != NULL)
 			temp = temp->next;
 
 		temp->next = CBOS_threadStatus.current_thread;
 	}
-	temp->delay = ms + 1;
+	
+	//set the delay value and add 1 because we are in the middle of a timeslice
+	temp->delay = ticks + 1;
 
 	CBOS_run_kernel();
 }
 
 void CBOS_yield(void)
 {
+	//first add the thread back into the priority queue then run the kernel
 	CBOS_add_priority_queue(CBOS_threadStatus.current_thread);
 	CBOS_run_kernel();
 }
 
 CBOS_mutex_id_t CBOS_create_mutex(void)
 {
-	__disable_irq();
+	//set the characteristics of the mutex
 	CBOS_mutex_t * mutex = (CBOS_mutex_t*)malloc(sizeof(CBOS_mutex_t));
 	mutex->count = 1;
 	mutex->owner = NULL;
 	mutex->next = NULL;
 	mutex->blocked_head = NULL;
 	
+	//add the mutex to the end of the mutex linked list
 	CBOS_mutex_t * temp = CBOS_threadStatus.mutex_head;
 	
 	uint8_t count = 0;
@@ -379,7 +371,6 @@ CBOS_mutex_id_t CBOS_create_mutex(void)
 		}
 		temp->next = mutex;
 	}
-	__enable_irq();
 	id.mutexId = count;
 	return id;
 }
@@ -388,10 +379,12 @@ void CBOS_mutex_aquire(CBOS_mutex_id_t calledMutex)
 {
 	__disable_irq();
 	
+	//find the muxtex that was called based on its ID
 	CBOS_mutex_t * mutex = CBOS_threadStatus.mutex_head;
 	for (uint8_t i = 0; i < calledMutex.mutexId; i++)
 		mutex = mutex->next;
 	
+	//check if the count is 0, which means it is locked
 	if (mutex->count == 0)
 	{
 		CBOS_threadInfo_t * temp = mutex->blocked_head;
@@ -407,26 +400,28 @@ void CBOS_mutex_aquire(CBOS_mutex_id_t calledMutex)
 
 			temp->next = CBOS_threadStatus.current_thread;
 		}
-		
-		__enable_irq();
-		
+				
 		//blocked
 		CBOS_run_kernel();
 	}
 	
+	//if the mutex is not locked, OR it was just released for this thread, lock it and set the new owners
 	__disable_irq();
 	mutex->count = 0;
 	mutex->owner = CBOS_threadStatus.current_thread;
 	__enable_irq();
-	
 }
 
 void CBOS_mutex_release(CBOS_mutex_id_t calledMutex)
 {
 	__disable_irq();
 	CBOS_mutex_t * mutex = CBOS_threadStatus.mutex_head;
+
+	//find the mutex based on its ID
 	for (uint8_t i = 0; i < calledMutex.mutexId; i++)
 		mutex = mutex->next;
+
+	//only release if the thread that called it is the owner
 	if (mutex->owner == CBOS_threadStatus.current_thread)
 	{
 		CBOS_threadInfo_t * temp = mutex->blocked_head;
@@ -439,6 +434,7 @@ void CBOS_mutex_release(CBOS_mutex_id_t calledMutex)
 		}
 		else
 			mutex->count = 1;
+			mutex->owner = NULL;
 	}
 	__enable_irq();
 }
@@ -454,8 +450,13 @@ CBOS_semaphore_id_t CBOS_create_semaphore(uint8_t max_count, uint8_t starting_co
 	
 	CBOS_semaphore_t * temp = CBOS_threadStatus.semaphore_head;
 	
+	//this will be used for the ID
 	uint8_t count = 0;
+
+	//create a semaphore ID to return
 	CBOS_semaphore_id_t id;
+
+	//find the end of the semaphore linked list
 	if (temp == NULL)
 		CBOS_threadStatus.semaphore_head = semaphore;
 	else
@@ -480,8 +481,12 @@ void CBOS_semaphore_aquire(CBOS_semaphore_id_t calledSemaphore)
 	__disable_irq();
 	
 	CBOS_semaphore_t * semaphore = CBOS_threadStatus.semaphore_head;
+
+	//find the semaphore based on its ID
 	for (uint8_t i = 0; i < calledSemaphore.semaphoreId; i++)
 		semaphore = semaphore->next;
+
+	//check if the count is 0, which means there are no more semaphores to aquire
 	if (semaphore->count == 0)
 	{
 		CBOS_threadInfo_t * temp = semaphore->blocked_head;
@@ -497,14 +502,14 @@ void CBOS_semaphore_aquire(CBOS_semaphore_id_t calledSemaphore)
 
 			temp->next = CBOS_threadStatus.current_thread;
 		}
-		
-		//__enable_irq();
-		
+				
 		//blocked
 		CBOS_run_kernel();
 	}
+
 	else 
 	{
+		//only if there was a semaphore available, without having to wait should we decrement
 		semaphore->count --;
 	}
 	__enable_irq();
@@ -513,12 +518,19 @@ void CBOS_semaphore_aquire(CBOS_semaphore_id_t calledSemaphore)
 void CBOS_semaphore_release(CBOS_semaphore_id_t calledSemaphore)
 {
 	__disable_irq();
+
 	CBOS_semaphore_t * semaphore = CBOS_threadStatus.semaphore_head;
+
+	//find the semaphore based on its ID
 	for (uint8_t i = 0; i < calledSemaphore.semaphoreId; i++)
 		semaphore = semaphore->next;
+	
+	//only increment if we are below the max count for the semaphore
 	if (semaphore->count < semaphore->max_count)
 	{
 		CBOS_threadInfo_t * temp = semaphore->blocked_head;
+
+		//only increment if there are no blocked threads waiting for this semaphore
 		if(semaphore->blocked_head != NULL)
 		{
 			semaphore->blocked_head = semaphore->blocked_head->next;
